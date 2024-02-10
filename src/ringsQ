@@ -1,0 +1,78 @@
+#include <malloc.h>
+#include <pthread.h>
+#include <stdatomic.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "HazardPointer.h"
+#include "RingsQueue.h"
+
+struct RingsQueueNode;
+typedef struct RingsQueueNode RingsQueueNode;
+
+struct RingsQueueNode {
+    _Atomic(RingsQueueNode*) next;
+    Value data[RING_SIZE]
+    _Atomic(int) pop_idx;
+    _Atomic(int) push_idx;
+};
+
+RingsQueueNode* RingsQueueNode_new() {
+    RingsQueueNode* node = malloc(sizeof(RingsQueueNode));
+    node->data           = malloc(size);
+    node->next           = NULL;
+    atomic_load(&node->pop_idx, 0);
+    atomic_load(&node->push_idx, 0);
+    return node;
+}
+
+struct RingsQueue {
+    RingsQueueNode* head;
+    RingsQueueNode* tail;
+    pthread_mutex_t pop_mtx;
+    pthread_mutex_t push_mtx;
+};
+
+RingsQueue* RingsQueue_new(void)
+{
+    RingsQueue* queue = (RingsQueue*)malloc(sizeof(RingsQueue));
+
+    queue->head       = RingsQueueNode_new(0);
+    queue->tail       = queue->head;
+
+    pthread_mutex_init(&queue->pop_mtx,  NULL);
+    pthread_mutex_init(&queue->push_mtx, NULL);
+
+    return queue;
+}
+
+void RingsQueue_delete(RingsQueue* queue)
+{
+    RingsQueueNode* current = queue->head;
+    RingsQueueNode* next;
+
+    while (current != NULL) {
+        next = current->next;
+        free(current->data);
+        free(current);
+        current = next;
+    }
+    
+    free(queue);
+}
+
+void RingsQueue_push(RingsQueue* queue, Value item)
+{
+    // TODO
+}
+
+Value RingsQueue_pop(RingsQueue* queue)
+{
+    return EMPTY_VALUE; // TODO
+}
+
+bool RingsQueue_is_empty(RingsQueue* queue)
+{
+    return false; // TODO
+}
