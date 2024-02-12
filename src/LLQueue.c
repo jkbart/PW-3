@@ -105,13 +105,13 @@ Value LLQueue_pop(LLQueue* queue)
 bool LLQueue_is_empty(LLQueue* queue)
 {
     while (true) {
-        LLNode* head = HazardPointer_protect(&queue->hp, &queue->head);
+        LLNode* tail = HazardPointer_protect(&queue->hp, &queue->tail);
 
-        bool ans = atomic_load(&head->next) != NULL || 
-            atomic_load(&head->item) != EMPTY_VALUE;
+        if (atomic_load(&tail->item) != EMPTY_VALUE)
+            return false;
 
-        if (head == atomic_load(&queue->head))
-            return ans;
+        if (atomic_load(&queue->tail) == tail)
+            return true;
     }
 
     // Is this enough?

@@ -121,5 +121,21 @@ Value BLQueue_pop(BLQueue* queue)
 
 bool BLQueue_is_empty(BLQueue* queue)
 {
-    return false; // TODO
+    while (true) {
+        BLNode* tail = HazardPointer_protect(&queue->hp, &queue->tail);
+
+        int pop_idx_1 = atomic_load(&tail->pop_idx); 
+        int push_idx = atomic_load(&tail->push_idx); 
+        int pop_idx_2 = atomic_load(&tail->pop_idx);
+
+        if (atomic_load(&queue->tail) != tail) {
+            if (pop_idx_2 < push_idx && push_idx < BUFFER_SIZE)
+                return false;
+            continue;
+        }
+
+        if ((pop_idx_1 < push_idx) == (pop_idx_2 < push_idx)) {
+            return pop_idx_1 >= push_idx || pop_idx_2 >= BUFFER_SIZE;
+        }
+    }
 }
