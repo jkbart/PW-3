@@ -36,7 +36,6 @@ void queue_viewer(SimpleQueue* queue) {
     printf("QUEUE %p state:\n", queue);
 
     while (current != NULL) {
-        printf("%ld ", current->item);
 
         next = current->next;
         current = next;
