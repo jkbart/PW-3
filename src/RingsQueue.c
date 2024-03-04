@@ -48,6 +48,8 @@ RingsQueue* RingsQueue_new(void)
 
 void RingsQueue_delete(RingsQueue* queue)
 {
+    pthread_mutex_lock(&queue->pop_mtx);
+
     RingsQueueNode* current = queue->head;
     RingsQueueNode* next;
 
@@ -56,7 +58,12 @@ void RingsQueue_delete(RingsQueue* queue)
         free(current);
         current = next;
     }
-    
+
+    pthread_mutex_unlock(&queue->pop_mtx);
+
+    pthread_mutex_destroy(&queue->pop_mtx);
+    pthread_mutex_destroy(&queue->push_mtx);
+
     free(queue);
 }
 
@@ -66,13 +73,13 @@ void RingsQueue_push(RingsQueue* queue, Value item)
 
     int push_id = atomic_load(&queue->tail->push_idx);
 
-    if (push_id == RING_SIZE) {
+    if (push_id >= RING_SIZE) {
         RingsQueueNode* new_node = RingsQueueNode_new();
         new_node->data[0] = item;
         atomic_store(&new_node->push_idx, 1);
 
         atomic_store(&queue->tail->next, new_node);
-        queue->tail = queue->tail->next;
+        queue->tail = new_node;
     } else {
        queue->tail->data[push_id] = item;
        atomic_store(&queue->tail->push_idx, push_id + 1);
@@ -86,24 +93,23 @@ Value RingsQueue_pop(RingsQueue* queue)
     Value ans = EMPTY_VALUE;
     pthread_mutex_lock(&queue->pop_mtx);
 
+    RingsQueueNode* next_node = atomic_load(&queue->head->next);
     int pop_id  = atomic_load(&queue->head->pop_idx);
     int push_id = atomic_load(&queue->head->push_idx);
-    RingsQueueNode* next_node = atomic_load(&queue->head->next);
 
-    if (pop_id != push_id) {
+    if (pop_id < push_id && pop_id < RING_SIZE) {
         ans = queue->head->data[pop_id];
         atomic_store(&queue->head->pop_idx, pop_id + 1);
-    } else if (next_node != NULL) {
+    } else if (pop_id >= RING_SIZE && next_node != NULL) {
         RingsQueueNode* old_node = queue->head;
         queue->head = next_node;
         free(old_node);
 
-        int pop_id  = atomic_load(&queue->head->pop_idx);
         int push_id = atomic_load(&queue->head->push_idx);
 
-        if (pop_id != push_id) {
-            ans = queue->head->data[pop_id];
-            atomic_store(&queue->head->pop_idx, pop_id + 1);
+        if (0 < push_id) {
+            ans = queue->head->data[0];
+            atomic_store(&queue->head->pop_idx, 1);
         }
     }
 
@@ -113,12 +119,15 @@ Value RingsQueue_pop(RingsQueue* queue)
 
 bool RingsQueue_is_empty(RingsQueue* queue)
 {
-    pthread_mutex_lock(&queue->push_mtx);
+    pthread_mutex_lock(&queue->pop_mtx);
 
-    bool ans = (atomic_load(&queue->tail->pop_idx) == 
-                atomic_load(&queue->tail->push_idx));
+    int pop_id  = atomic_load(&queue->tail->pop_idx);
+    int push_id = atomic_load(&queue->tail->push_idx);
 
-    pthread_mutex_unlock(&queue->push_mtx);
+    bool ans = (pop_id >= push_id || pop_id >= RING_SIZE) &&
+                atomic_load(&queue->head->next) == NULL;
+
+    pthread_mutex_unlock(&queue->pop_mtx);
 
     return ans;
 }

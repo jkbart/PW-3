@@ -28,21 +28,6 @@ struct SimpleQueue {
     pthread_mutex_t tail_mtx;
 };
 
-// DEBUG
-void queue_viewer(SimpleQueue* queue) {
-    SimpleQueueNode* current = queue->head;
-    SimpleQueueNode* next;
-
-    printf("QUEUE %p state:\n", queue);
-
-    while (current != NULL) {
-
-        next = current->next;
-        current = next;
-    }
-
-    printf("\n");   
-}
 
 SimpleQueue* SimpleQueue_new(void)
 {
@@ -64,7 +49,7 @@ void SimpleQueue_delete(SimpleQueue* queue)
         free(current);
         current = next;
     }
-    
+
     free(queue);
 }
 
@@ -87,7 +72,6 @@ Value SimpleQueue_pop(SimpleQueue* queue)
     pthread_mutex_lock(&queue->head_mtx);
 
     if (queue->head != queue->tail) {
-        // queue_viewer(queue);
         ans = atomic_load(&queue->head->next)->item;
         atomic_load(&queue->head->next)->item = EMPTY_VALUE;
         

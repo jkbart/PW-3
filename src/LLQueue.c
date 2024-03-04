@@ -46,6 +46,7 @@ void LLQueue_delete(LLQueue* queue)
     LLNode* current = atomic_load(&queue->head);
     LLNode* node_to_free;
 
+    // No need to free() in _delete using HP.
     while (current != NULL) {
         node_to_free = current;
         current = atomic_load(&current->next);
@@ -61,16 +62,16 @@ void LLQueue_push(LLQueue* queue, Value item)
 {
     AtomicLLNodePtr new_node;
     atomic_store(&new_node, LLNode_new(item));
-
     while (true) {
         LLNode* tail = HazardPointer_protect(&queue->hp, &queue->tail); // 1
         LLNode* next = atomic_load(&tail->next);
 
         if (next == NULL && atomic_compare_exchange_strong(&tail->next, &next, new_node)) { // 2
-            atomic_store(&queue->tail, new_node); // 3a
+            atomic_compare_exchange_strong(&queue->tail, &tail, new_node); // 3a
+            HazardPointer_clear(&queue->hp);
             return;
         } else { // 3b
-            atomic_compare_exchange_strong(&queue->tail, &tail, atomic_load(&tail->next));
+            atomic_compare_exchange_strong(&queue->tail, &tail, next);
             continue;
         }
     }
@@ -89,9 +90,11 @@ Value LLQueue_pop(LLQueue* queue)
                     HazardPointer_retire(&queue->hp, head);
                 }
             }
+            HazardPointer_clear(&queue->hp);
             return first_item;
         } else { // 3b
             if (next == NULL){
+                HazardPointer_clear(&queue->hp);
                 return EMPTY_VALUE;
             } else { // queue update
                 if (atomic_compare_exchange_strong(&queue->head, &head, next)) {
@@ -104,19 +107,12 @@ Value LLQueue_pop(LLQueue* queue)
 
 bool LLQueue_is_empty(LLQueue* queue)
 {
-    while (true) {
-        LLNode* tail = HazardPointer_protect(&queue->hp, &queue->tail);
+    LLNode* head = HazardPointer_protect(&queue->hp, &queue->head);
 
-        if (atomic_load(&tail->item) != EMPTY_VALUE)
-            return false;
+    bool ans = atomic_load(&head->item) == EMPTY_VALUE && 
+        atomic_load(&head->next) == NULL;
 
-        if (atomic_load(&queue->tail) == tail)
-            return true;
-    }
+    HazardPointer_clear(&queue->hp);
 
-    // Is this enough?
-    // LLNode* head = HazardPointer_protect(&queue->hp, &queue->head);
-    // 
-    // return atomic_load(&head->next) != NULL || 
-    //     atomic_load(&head->item) != EMPTY_VALUE;
+    return ans;
 }
