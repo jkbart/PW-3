@@ -1,4 +1,4 @@
-# Couple thread safe queues
+# Couple thread safe queues in C
 
 ## SimpleQueue
 one-way list queue, with two mutexes
@@ -14,3 +14,5 @@ lock-free queue from a list of buffers
 
 ## HazardPointer
 Both LLQueue and BLQueue are using my implementation of HazardPointer 
+
+Grade: 9.9/10
